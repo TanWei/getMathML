@@ -12,9 +12,16 @@
 
 #include "MathTypeHelper.h"
 
-typedef long (WINAPI *MTConnect)(int,int);
-typedef long (WINAPI *MTDisconnect)();
-typedef long (WINAPI *MTGetPrefsMTDefault)(char*,int);
+typedef long (WINAPI *MTAPIConnectFunc)(int,int);
+typedef long (WINAPI *MTAPIDisconnectFunc)();
+typedef long (WINAPI *MTXFormResetFunc)();
+typedef long (WINAPI *MTXFormSetTranslatorFunc)(int,char*);
+typedef long (WINAPI *MTXFormEqnFunc)(int, int, BYTE*, long, int, int, char*, long, std::string, MTAPI_DIMS&);
+//Public Function MTXFormSetTranslator (
+//	options As Integer,
+//	transName As String
+//	) As Long
+//typedef long (WINAPI *MTGetPrefsMTDefault)(char*,int);
 
 std::wstring GetMathTypePath()
 {
@@ -145,7 +152,17 @@ CMathTypeProcessor::~CMathTypeProcessor(void)
 
 void CMathTypeProcessor::ConvertToXml(char * fn)
 {
-	CreateMathmlFFxTdl("");
+	//CreateMathmlFFxTdl("");
+
+	long nResult;
+	MTAPIConnectFunc mtConnect = (MTAPIConnectFunc)GetProcAddress(m_hMT6Dll, "MTAPIConnect");
+	MTXFormResetFunc mtFormReset = (MTXFormResetFunc)GetProcAddress(m_hMT6Dll, "MTXFormReset");
+	MTXFormSetTranslatorFunc mtFormSetTranslator = (MTXFormSetTranslatorFunc)GetProcAddress(m_hMT6Dll, "MTXFormSetTranslator");
+	MTXFormEqnFunc mtFormEqn = (MTXFormEqnFunc)GetProcAddress(m_hMT6Dll, "MTXFormEqn");
+	MTAPIDisconnectFunc mtDisConnect = (MTAPIDisconnectFunc)GetProcAddress(m_hMT6Dll, "MTAPIDisconnect");
+	if (!mtConnect)
+	{
+	}
 
 	//char * fn="E:\\Doc2 - 副本\\word\\embeddings\\oleObject1\\Equation Native";
 	//char * fn1="E:\\Doc2 - 副本\\word\\embeddings\\oleObject1\\Equation Native1";
@@ -159,4 +176,21 @@ void CMathTypeProcessor::ConvertToXml(char * fn)
 	mathTypeHelper.Init(param);
 	int nR1 = mathTypeHelper.GetStyleXml(styleXML);
 	int nR2  = mathTypeHelper.GetMTTransXml(MTXML);
+
+	std::vector<BYTE> arrHeight = mathTypeHelper.GetByteData();
+	BYTE* buffer = new BYTE[sizeof(arrHeight)];  
+	if (!arrHeight.empty())  
+	{  
+		memcpy(buffer, &arrHeight[28], (arrHeight.size()-27)*sizeof(BYTE));  
+	}
+	//启动
+	nResult = mtConnect(0,30);
+	nResult = mtFormReset();
+	nResult = mtFormSetTranslator(3, "MathML2 (m namespace).tdl");
+	//int, int, char*, long, int, int, char*, long, std::string, MTAPI_DIMS&
+	char* ref_char = new char[5000];
+	MTAPI_DIMS aa;
+	nResult = mtFormEqn(-3, 4, buffer, arrHeight.size(), -3, 7, ref_char, 5000, "D:\\out.a", aa);
+	//断开
+	nResult = mtDisConnect();
 }

@@ -32,6 +32,8 @@ typedef std::shared_ptr<MTEF::AppsMFCCHeader> AppsMFCCHeaderPtr;
 class CMathTypeHelper
 {
 public:
+
+	std::vector<BYTE> GetByteData() {return m_ByteData;}
 	CMathTypeHelper(void);
 	virtual ~CMathTypeHelper(void);
 	bool CMathTypeHelper::Init(const MTParsParam& param);
