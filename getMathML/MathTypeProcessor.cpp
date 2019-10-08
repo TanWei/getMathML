@@ -143,7 +143,6 @@ CMathTypeProcessor::~CMathTypeProcessor(void)
 	FreeLibrary(m_hMT6Dll);
 }
 
-
 void CMathTypeProcessor::ConvertToXml(char * fn)
 {
 	CreateMathmlFFxTdl("");
