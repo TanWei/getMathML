@@ -11,6 +11,8 @@
 
 #include "MathTypeHelper.h"
 
+#include "Interface/XML/XML.H"
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -235,14 +237,26 @@ void CMathTypeProcessor::ConvertToXml(char * fn)
 		{
 		case 0x00:
 			{
-				style = "";
+				style = "plain";
 			}
-			
 			break;
+		case 0x01:
+			{
+				style = "bold";
+			}
+			break;
+		case 0x02:
+			{
+				style = "italic";
+			}
+			break;
+		case 0x03:
+			{
+				style = "bold_italic";
+			}
 		default:
 			break;
 		}
-		
 		map_name_to_style.insert(std::make_pair(CHAR_STYLE_NAME_ARR[i], style));
 	}
 
@@ -251,4 +265,11 @@ void CMathTypeProcessor::ConvertToXml(char * fn)
 	KMathTypeReturnValue mtef_to_mathml_mnamespace_ok = ConvertMTEFtoXmlByTdl(mtef_byte_data, MATHML2_MNAMESPACE_TDL, mathml_mnamespace);
 	std::string mathml_ffx;
 	KMathTypeReturnValue mtef_to_mathml_ffx_ok = ConvertMTEFtoXmlByTdl(mtef_byte_data, MATHML2_FFX_TDL, mathml_ffx);
+	if (mtef_to_mathml_mnamespace_ok != mtOK || mtef_to_mathml_ffx_ok !=mtOK)
+	{
+		return;
+	}
+	CXMLTree xmlTree;
+	xmlTree.LoadXML(mathml_mnamespace);
+	xmlTree.AddXPathNamespace(L"m", L"http://www.w3.org/1998/Math/MathML");
 }
