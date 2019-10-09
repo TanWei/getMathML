@@ -9,6 +9,10 @@
 #include <algorithm>
 #include <iomanip>
 
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
 using namespace MTEF;
 
 CMathTypeHelper::CMathTypeHelper(void)
@@ -80,8 +84,9 @@ void CMathTypeHelper::InitRecordParseFuncMap()
 std::string CMathTypeHelper::GetFileExt(const char* wstrFileName)
 {
 	std::string str(wstrFileName);
-	int iFind=static_cast<int>(str.rfind(L'.'));
-	if (iFind<0)
+	int iFind = static_cast<int>(str.rfind('.'));
+	int iFindLimit = static_cast<int>(str.rfind('\\'));
+	if (iFind<0 || iFind < iFindLimit)
 		return "";
 	return str.substr(iFind+1);
 };
@@ -117,7 +122,6 @@ bool CMathTypeHelper::Init(const MTParsParam& param)
 	{
 		return bRet;
 	}
-	
 	return bRet = true;
 }
 
@@ -615,5 +619,25 @@ MTRecordPtr CMathTypeHelper::ParseENCODING_DEF()
 	std::shared_ptr<MTEnCoding_Def> encoding_def = std::make_shared<MTEnCoding_Def>();
 	BYTECONV::conv(m_ByteData, m_idx, encoding_def->encoding_name);
 	return encoding_def;
+}
+
+void CMathTypeHelper::GetCharStyleArr(std::vector<BYTE>& char_style_arr)
+{
+	std::vector<std::pair<BYTE, BYTE>> style_arr;
+	std::shared_ptr<MTEqn_Prefs> eqn_prefs;
+	for (int i=0; i<m_mtef_data->contents.size(); i++)
+	{
+		RecordBasePtr record_ptr = m_mtef_data->contents[i];
+		if (record_ptr->record_type == EQN_PREFS_RECORD)
+		{
+			eqn_prefs = std::dynamic_pointer_cast<MTEqn_Prefs>(record_ptr);
+		}	
+	}
+
+	for (int i=0; i<eqn_prefs->style_arr.size(); i++)
+	{
+		BYTE char_style = eqn_prefs->style_arr[i].second;
+		char_style_arr.push_back(char_style);
+	}
 }
 

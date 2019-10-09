@@ -76,3 +76,23 @@ getMathML/Debug/vc100.pdb
 ipch/getmathml-fdce161b/getmathml-aef66d8f.ipch
 
 getMathML/Debug/getMathML.Build.CppClean.log
+
+getMathML\.suo
+
+*.tlog
+
+*.filters
+
+*.obj
+
+*.tli
+
+*.tlh
+
+*.log
+
+*.lastbuildstate
+
+*.cache
+
+*.lib

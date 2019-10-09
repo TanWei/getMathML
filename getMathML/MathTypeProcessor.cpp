@@ -1,7 +1,6 @@
 #include "StdAfx.h"
 #include "MathTypeProcessor.h"
 
-#include <string>
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -12,40 +11,48 @@
 
 #include "MathTypeHelper.h"
 
-typedef long (WINAPI *MTAPIConnectFunc)(int,int);
-typedef long (WINAPI *MTAPIDisconnectFunc)();
-typedef long (WINAPI *MTXFormResetFunc)();
-typedef long (WINAPI *MTXFormSetTranslatorFunc)(int,char*);
-typedef long (WINAPI *MTXFormEqnFunc)(int, int, BYTE*, long, int, int, char*, long, std::string, MTAPI_DIMS&);
-//Public Function MTXFormSetTranslator (
-//	options As Integer,
-//	transName As String
-//	) As Long
-//typedef long (WINAPI *MTGetPrefsMTDefault)(char*,int);
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
 
-std::wstring GetMathTypePath()
+using namespace MTSDKDN;
+
+static const int MTAPICONNECT_TIME_OUT = 30;
+static const std::string MATHML2_FFX_TDL = "MathML2 (FFx).tdl";
+static const std::string MATHML2_MNAMESPACE_TDL = "MathML2 (m namespace).tdl";
+static const int CHAR_STYLE_NUM = 12;
+static const std::string CHAR_STYLE_NAMES[] = {"text","function","variable","greek","lc_greek","uc_greek","symbol","vector","number","extra_math","user1style","user2style"};
+static const std::vector<std::string> CHAR_STYLE_NAME_ARR(CHAR_STYLE_NAMES, CHAR_STYLE_NAMES+CHAR_STYLE_NUM);
+
+typedef KMathTypeReturnValue (WINAPI *MTAPIConnectFunc)(int,int);
+typedef KMathTypeReturnValue (WINAPI *MTAPIDisconnectFunc)();
+typedef KMathTypeReturnValue (WINAPI *MTXFormResetFunc)();
+typedef KMathTypeReturnValue (WINAPI *MTXFormSetTranslatorFunc)(int, const char*);
+typedef KMathTypeReturnValue (WINAPI *MTXFormEqnFunc)(int, int, const BYTE*, long, int, int, char*, long, char*, MTAPI_DIMS&);
+
+std::string CMathTypeProcessor::GetMathTypePath()
 {
 	HKEY hKEY;
-	std::wstring strRegPath = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\MathType.exe"; 
-	if (::RegOpenKeyEx(HKEY_LOCAL_MACHINE,strRegPath.c_str(), 0, KEY_READ, &hKEY)!=ERROR_SUCCESS)
+	std::string strRegPath = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\MathType.exe"; 
+	if (::RegOpenKeyExA(HKEY_LOCAL_MACHINE,strRegPath.c_str(), 0, KEY_READ, &hKEY)!=ERROR_SUCCESS)
 	{
-		return L"";
+		return "";
 	}
 
 	DWORD dwType = REG_SZ;
 	BYTE byWordConvPath[1024];
 	ZeroMemory(byWordConvPath,1024);
 	DWORD dwSize = 1024;
-	if (::RegQueryValueEx(hKEY, L"Path", NULL, &dwType, byWordConvPath, &dwSize)!=ERROR_SUCCESS)
+	if (::RegQueryValueExA(hKEY, "Path", NULL, &dwType, byWordConvPath, &dwSize)!=ERROR_SUCCESS)
 	{
-		return L"";
+		return "";
 	}
 	::RegCloseKey(hKEY); 
 
-	return (wchar_t*)(byWordConvPath);
+	return (char*)(byWordConvPath);
 }
 
-std::string FindReplaceString(const std::string& source, const std::string& findstr, const std::string& replacestr)
+std::string CMathTypeProcessor::FindReplaceString(const std::string& source, const std::string& findstr, const std::string& replacestr)
 {
 	std::string ret_str(source);
 	int pos;
@@ -58,50 +65,86 @@ std::string FindReplaceString(const std::string& source, const std::string& find
 	return ret_str;
 }
 
-void WriteMathmlFFxTdlLine(std::ofstream& fout)
+std::string CMathTypeProcessor::CreateMathmlFFxTdlLine(const std::string& source, const std::string& base_str)
+{
+	std::string ffx_command(source);
+	ffx_command = FindReplaceString(ffx_command, "char_style", base_str);
+	ffx_command = FindReplaceString(ffx_command, "run_name", base_str+"_style");
+	return ffx_command;
+}
+
+void CMathTypeProcessor::WriteMathmlFFxTdlLine(std::ofstream& fout)
 {
 	const std::string ffx_mathml_tdl_head = "MathType Output Translator 1.0: \"MathML 2.0 (FFx)\", \"MathML 2.0 (FFx)\"";
 	fout << ffx_mathml_tdl_head << std::endl;
 	//trans char_style(plain, bold, italic, or bold_italic)
-	std::string ffx_run_command = "run/char_style/name/\"char_style\" = \"#\";";
-	std::string ffx_char_command = "char/0x0000/0xFFFF/\"char_style\" = \"<mtext mathtypevariant='char_style'>&$#x(CharHex);</mtext>\";";
-	fout << FindReplaceString(ffx_run_command, "char_style", "plain") << std::endl << FindReplaceString(ffx_char_command, "char_style", "plain") << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "bold") << std::endl << FindReplaceString(ffx_char_command, "char_style", "bold") << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "italic") << std::endl << FindReplaceString(ffx_char_command, "char_style", "italic") << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "bold_italic") << std::endl << FindReplaceString(ffx_char_command, "char_style", "bold_italic") << std::endl;
+	std::string ffx_run_command = "run/char_style/name/\"run_name\" = \"#\";";
+	std::string ffx_char_command = "char/0x0000/0xFFFF/\"run_name\" = \"<mtext mathtypevariant='char_style'>&$#x(CharHex);</mtext>\";";
+	fout << CreateMathmlFFxTdlLine(ffx_run_command, "plain") << std::endl 
+		 << CreateMathmlFFxTdlLine(ffx_char_command, "plain") << std::endl;
+	fout << CreateMathmlFFxTdlLine(ffx_run_command, "bold") << std::endl 
+		 << CreateMathmlFFxTdlLine(ffx_char_command, "bold") << std::endl;
+	fout << CreateMathmlFFxTdlLine(ffx_run_command, "italic")	<< std::endl 
+		 << CreateMathmlFFxTdlLine(ffx_char_command, "italic") << std::endl;
+	fout << CreateMathmlFFxTdlLine(ffx_run_command, "bold_italic") << std::endl 
+		 << CreateMathmlFFxTdlLine(ffx_char_command, "bold_italic") << std::endl;
 	//trans style(text, function, variable, greek, lc_greek, uc_greek, symbol, vector, number, extra_math, user1style, or user2style)
-	fout << FindReplaceString(ffx_run_command, "char_style", "text") << std::endl << FindReplaceString(ffx_char_command, "char_style", "text") << std::endl;
-	//fout << FindReplaceString(ffx_run_command, "char_style", "function") << std::endl << FindReplaceString(ffx_char_command, "char_style", "function") << std::endl;
-	fout << "run/function/name/\"function_style\" = \"#\";" << std::endl
-		<< "char/0x0000/0xFFFF/\"function_style\" = \"<mtext mathtypevariant='function'>&$#x(CharHex);</mtext>\";" << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "variable") << std::endl << FindReplaceString(ffx_char_command, "char_style", "variable") << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "greek") << std::endl << FindReplaceString(ffx_char_command, "char_style", "greek") << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "lc_greek") << std::endl << FindReplaceString(ffx_char_command, "char_style", "lc_greek") << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "uc_greek") << std::endl << FindReplaceString(ffx_char_command, "char_style", "uc_greek") << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "symbol") << std::endl << FindReplaceString(ffx_char_command, "char_style", "symbol") << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "vector") << std::endl << FindReplaceString(ffx_char_command, "char_style", "vector") << std::endl;
-	//fout << FindReplaceString(ffx_run_command, "char_style", "number") << std::endl << FindReplaceString(ffx_char_command, "char_style", "number") << std::endl;
-	fout << "run/number/name/\"number_style\" = \"#\";" << std::endl
-		<< "char/0x0000/0xFFFF/\"number_style\" = \"<mtext mathtypevariant='number'>&$#x(CharHex);</mtext>\";" << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "extra_math") << std::endl << FindReplaceString(ffx_char_command, "char_style", "extra_math") << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "user1style") << std::endl << FindReplaceString(ffx_char_command, "char_style", "user1style") << std::endl;
-	fout << FindReplaceString(ffx_run_command, "char_style", "user2style") << std::endl << FindReplaceString(ffx_char_command, "char_style", "user2style") << std::endl;
+	for (int i=0; i<CHAR_STYLE_NAME_ARR.size(); i++)
+	{
+		fout << CreateMathmlFFxTdlLine(ffx_run_command, CHAR_STYLE_NAME_ARR[i]) << std::endl 
+			<< CreateMathmlFFxTdlLine(ffx_char_command, CHAR_STYLE_NAME_ARR[i]) << std::endl;
+	}
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "text") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "text") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "function") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "function") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "variable") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "variable") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "greek") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "greek") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "lc_greek") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "lc_greek") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "uc_greek") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "uc_greek") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "symbol") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "symbol") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "vector") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "vector") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "number") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "number") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "extra_math") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "extra_math") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "user1style") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "user1style") << std::endl;
+	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "user2style") << std::endl 
+	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "user2style") << std::endl;
 }
 
-void CreateMathmlFFxTdl(std::string file)
+bool CMathTypeProcessor::CreateMathmlFFxTdl(const std::string& mathml2_ffx_tdl)
 {
-	//gtl::deletefile(file);
-	std::ifstream fin("C:\\Users\\tanwei.HOLD\\Documents\\Visual Studio 2010\\Projects\\getMathML\\Debug\\MathML2 (m namespace).tdl", std::ios::in);
-	std::ofstream fout("C:\\Users\\tanwei.HOLD\\Documents\\Visual Studio 2010\\Projects\\getMathML\\Debug\\MathML2 (FFx).tdl", std::ios::out);
+	bool bRet = false;
+
+	std::string mathml2_ffx_tdl_full = mathtype_path_ + "\\Translators\\" + mathml2_ffx_tdl;
+	std::ifstream fin_ffx_tdl(mathml2_ffx_tdl_full, std::ios::in);
+	if (fin_ffx_tdl.is_open())
+	{
+		fin_ffx_tdl.clear();
+		fin_ffx_tdl.close();
+		return bRet=true;
+	}
+	std::string mathml2_mnamespace_tdl_full = mathtype_path_ + "\\Translators\\" + MATHML2_MNAMESPACE_TDL;
+	std::ifstream fin(mathml2_mnamespace_tdl_full, std::ios::in);
+	std::ofstream fout(mathml2_ffx_tdl_full, std::ios::out);
 	if (!fin.is_open() || !fout.is_open())
 	{
-		return;
+		return bRet;
 	}
+	bool flag = true;
 	const std::string namespace_mathml_tdl_head = "MathType Output Translator 1.0: \"MathML 2.0 (m namespace)\"";
 	std::string file_line;
 	while(std::getline(fin, file_line))
 	{
-		if (file_line.find(namespace_mathml_tdl_head) != -1)
+		if (flag && file_line.find(namespace_mathml_tdl_head) != -1)
 		{
 			WriteMathmlFFxTdlLine(fout);
 		}
@@ -116,81 +159,96 @@ void CreateMathmlFFxTdl(std::string file)
 	fin.close();
 	fout.clear();
 	fout.close();
+
+	return bRet = true;
 }
 
 CMathTypeProcessor::CMathTypeProcessor(void)
 {
-	//std::string strMT6DllPath = GetMathTypePath();
-	//strMT6DllPath.append(L"\\System\\MT6.dll");
-	//std::string strMT6DllPath =  "";
-	//HMODULE hDll = LoadLibrary(strMT6DllPath.c_str());
-	std::wstring strMT6DllPath = GetMathTypePath();
-	strMT6DllPath.append(L"\\System\\MT6.dll");
-	m_hMT6Dll = LoadLibrary(strMT6DllPath.c_str());
+	mathtype_path_ = GetMathTypePath();
+	std::string MT6_dll_path_ = mathtype_path_ + "\\System\\MT6.dll";
+	m_hMT6Dll = LoadLibraryA(MT6_dll_path_.c_str());
 }
-
-//void CreatTxt(char* pathName, unsigned char* rBuffer,int length)//创建txt文件
-//{
-//	//char* path = "C:\\1.txt"; // 你要创建文件的路径
-//	ofstream fout(pathName);
-//	if (fout) { // 如果创建成功
-//		for (int i = 0; i < length; i++)
-//		{
-//			fout <<“”写入的内容“”<< endl; // 使用与cout同样的方式进行写入
-//
-//
-//		}
-//
-//		fout.close();  // 执行完操作后关闭文件句柄
-//	}
-//}
 
 CMathTypeProcessor::~CMathTypeProcessor(void)
 {
-	FreeLibrary(m_hMT6Dll);
+	if (m_hMT6Dll != NULL)
+	{
+		FreeLibrary(m_hMT6Dll);
+	}
 }
 
-void CMathTypeProcessor::ConvertToXml(char * fn)
+KMathTypeReturnValue CMathTypeProcessor::ConvertMTEFtoXmlByTdl(const std::vector<BYTE>& mtef_byte_data, const std::string& tdl_name, std::string& xml_string)
 {
-	//CreateMathmlFFxTdl("");
+	KMathTypeReturnValue kMathTypeReturnValue = mtERROR;
 
-	long nResult;
 	MTAPIConnectFunc mtConnect = (MTAPIConnectFunc)GetProcAddress(m_hMT6Dll, "MTAPIConnect");
 	MTXFormResetFunc mtFormReset = (MTXFormResetFunc)GetProcAddress(m_hMT6Dll, "MTXFormReset");
 	MTXFormSetTranslatorFunc mtFormSetTranslator = (MTXFormSetTranslatorFunc)GetProcAddress(m_hMT6Dll, "MTXFormSetTranslator");
 	MTXFormEqnFunc mtFormEqn = (MTXFormEqnFunc)GetProcAddress(m_hMT6Dll, "MTXFormEqn");
 	MTAPIDisconnectFunc mtDisConnect = (MTAPIDisconnectFunc)GetProcAddress(m_hMT6Dll, "MTAPIDisconnect");
-	if (!mtConnect)
+	if (!mtConnect || !mtFormReset || !mtFormSetTranslator || !mtFormEqn || !mtDisConnect)
 	{
+		return kMathTypeReturnValue;
 	}
 
-	//char * fn="E:\\Doc2 - 副本\\word\\embeddings\\oleObject1\\Equation Native";
-	//char * fn1="E:\\Doc2 - 副本\\word\\embeddings\\oleObject1\\Equation Native1";
-	char * styleXML="E:\\Doc2 - 副本\\word\\embeddings\\oleObject1\\Equation Native1";
-	char * MTXML ="E:\\Doc2 - 副本\\word\\embeddings\\oleObject1\\Equation Native1";
+	//启动
+	kMathTypeReturnValue = mtConnect(mtinitLAUNCH_AS_NEEDED, MTAPICONNECT_TIME_OUT);
+	if (kMathTypeReturnValue==mtOK)
+	{
+		kMathTypeReturnValue==mtOK && (kMathTypeReturnValue = mtFormSetTranslator(mtxfmTRANSL_INC_NONE, tdl_name.c_str()));
+		if (kMathTypeReturnValue==mtOK)
+		{
+			std::vector<char> ref_arr;
+			ref_arr.resize(5000);
+			kMathTypeReturnValue = mtFormEqn(mtxfmLOCAL, mtxfmMTEF, &mtef_byte_data[0], mtef_byte_data.size(), mtxfmLOCAL, mtxfmTEXT, &ref_arr[0], 5000, "", MTAPI_DIMS());
+			xml_string.clear();
+			xml_string.append(ref_arr.begin(), ref_arr.end());
+		}
 
+		kMathTypeReturnValue = mtDisConnect();
+	}
+	return kMathTypeReturnValue;
+}
+
+void CMathTypeProcessor::ConvertToXml(char * fn)
+{
 	MTParsParam param;
 	param.m_ParseMTFileName = fn;
-	//param.m_DesMTFileName = fn1;
 	CMathTypeHelper mathTypeHelper;
 	mathTypeHelper.Init(param);
-	int nR1 = mathTypeHelper.GetStyleXml(styleXML);
-	int nR2  = mathTypeHelper.GetMTTransXml(MTXML);
-
-	std::vector<BYTE> arrHeight = mathTypeHelper.GetByteData();
-	BYTE* buffer = new BYTE[sizeof(arrHeight)];  
-	if (!arrHeight.empty())  
-	{  
-		memcpy(buffer, &arrHeight[28], (arrHeight.size()-27)*sizeof(BYTE));  
+	std::vector<BYTE> file_byte_data = mathTypeHelper.GetByteData();
+	UINT mtef_bdx = mathTypeHelper.GetMtef_bdx();
+	UINT mtef_edx = mathTypeHelper.GetMtef_edx();
+	std::vector<BYTE> mtef_byte_data(file_byte_data.begin()+mtef_bdx, file_byte_data.begin()+mtef_edx);
+	std::vector<BYTE> char_style_arr;
+	mathTypeHelper.GetCharStyleArr(char_style_arr);
+	if (char_style_arr.size() != CHAR_STYLE_NUM)
+	{
+		return;
 	}
-	//启动
-	nResult = mtConnect(0,30);
-	nResult = mtFormReset();
-	nResult = mtFormSetTranslator(3, "MathML2 (m namespace).tdl");
-	//int, int, char*, long, int, int, char*, long, std::string, MTAPI_DIMS&
-	char* ref_char = new char[5000];
-	MTAPI_DIMS aa;
-	nResult = mtFormEqn(-3, 4, buffer, arrHeight.size(), -3, 7, ref_char, 5000, "D:\\out.a", aa);
-	//断开
-	nResult = mtDisConnect();
+	std::map<std::string, std::string> map_name_to_style;
+	for (int i=0; i<CHAR_STYLE_NUM; i++)
+	{
+		std::string style;
+		switch (char_style_arr[i])
+		{
+		case 0x00:
+			{
+				style = "";
+			}
+			
+			break;
+		default:
+			break;
+		}
+		
+		map_name_to_style.insert(std::make_pair(CHAR_STYLE_NAME_ARR[i], style));
+	}
+
+	CreateMathmlFFxTdl(MATHML2_FFX_TDL);
+	std::string mathml_mnamespace;
+	KMathTypeReturnValue mtef_to_mathml_mnamespace_ok = ConvertMTEFtoXmlByTdl(mtef_byte_data, MATHML2_MNAMESPACE_TDL, mathml_mnamespace);
+	std::string mathml_ffx;
+	KMathTypeReturnValue mtef_to_mathml_ffx_ok = ConvertMTEFtoXmlByTdl(mtef_byte_data, MATHML2_FFX_TDL, mathml_ffx);
 }

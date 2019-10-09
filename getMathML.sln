@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "getMathML", "getMathML\getMathML.vcxproj", "{0BAD8B87-DCD5-4A1B-9B8A-DD16976AAFEA}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "XML", "getMathML\Modules\XML\XML.vcxproj", "{F51A30A1-14A3-4ECF-A506-2DC346729635}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -13,6 +15,10 @@ Global
 		{0BAD8B87-DCD5-4A1B-9B8A-DD16976AAFEA}.Debug|Win32.Build.0 = Debug|Win32
 		{0BAD8B87-DCD5-4A1B-9B8A-DD16976AAFEA}.Release|Win32.ActiveCfg = Release|Win32
 		{0BAD8B87-DCD5-4A1B-9B8A-DD16976AAFEA}.Release|Win32.Build.0 = Release|Win32
+		{F51A30A1-14A3-4ECF-A506-2DC346729635}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F51A30A1-14A3-4ECF-A506-2DC346729635}.Debug|Win32.Build.0 = Debug|Win32
+		{F51A30A1-14A3-4ECF-A506-2DC346729635}.Release|Win32.ActiveCfg = Release|Win32
+		{F51A30A1-14A3-4ECF-A506-2DC346729635}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

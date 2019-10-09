@@ -181,7 +181,11 @@ void CgetMathMLDlg::OnBnClickedButton1()
 	strcpy(fn, stylesheet.c_str());
 
 	CMathTypeProcessor mathTypeProcessor;
-	mathTypeProcessor.ConvertToXml(fn);
+	//for (int i=0; i<100; i++)
+	{
+		mathTypeProcessor.ConvertToXml(fn);
+	}
+	
 	//CMathTypeHelper mathTypeHelper;
 	//vector<BYTE> v2 = mathTypeHelper.ReadFileIntoBinary(fn);
 	//WORD cbHdr = v2[0];
@@ -194,7 +198,7 @@ void CgetMathMLDlg::OnBnClickedButton1()
 	//	return;
 	//}
 
-
+	delete[] fn;
 	//mathTypeHelper.WriteBinaryIntoFile(fn1, v2);
 	int n = 0;
 }
