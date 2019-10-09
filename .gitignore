@@ -106,3 +106,5 @@ getMathML/Debug/link.8092.write.1.tlog
 getMathML/Docx2CDXml----------.cpp
 
 *.tdl
+
+getMathML/Modules/XML/XML\.vcxproj\.filters
