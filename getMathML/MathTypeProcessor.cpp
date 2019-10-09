@@ -9,6 +9,11 @@
 #include <algorithm>
 #include <iomanip>
 
+#include <locale>
+#include <codecvt>
+#include <string>
+#include <set>
+
 #include "MathTypeHelper.h"
 
 #include "Interface/XML/XML.H"
@@ -22,6 +27,7 @@ using namespace MTSDKDN;
 static const int MTAPICONNECT_TIME_OUT = 30;
 static const std::string MATHML2_FFX_TDL = "MathML2 (FFx).tdl";
 static const std::string MATHML2_MNAMESPACE_TDL = "MathML2 (m namespace).tdl";
+static const std::string MATHML2_NAMESPACEATTR_TDL = "MathML2 (namespace attr).tdl";
 static const int CHAR_STYLE_NUM = 12;
 static const std::string CHAR_STYLE_NAMES[] = {"text","function","variable","greek","lc_greek","uc_greek","symbol","vector","number","extra_math","user1style","user2style"};
 static const std::vector<std::string> CHAR_STYLE_NAME_ARR(CHAR_STYLE_NAMES, CHAR_STYLE_NAMES+CHAR_STYLE_NUM);
@@ -132,9 +138,9 @@ bool CMathTypeProcessor::CreateMathmlFFxTdl(const std::string& mathml2_ffx_tdl)
 	{
 		fin_ffx_tdl.clear();
 		fin_ffx_tdl.close();
-		return bRet=true;
+		//return bRet=true; //添加版本控制后放开
 	}
-	std::string mathml2_mnamespace_tdl_full = mathtype_path_ + "\\Translators\\" + MATHML2_MNAMESPACE_TDL;
+	std::string mathml2_mnamespace_tdl_full = mathtype_path_ + "\\Translators\\" + MATHML2_NAMESPACEATTR_TDL;
 	std::ifstream fin(mathml2_mnamespace_tdl_full, std::ios::in);
 	std::ofstream fout(mathml2_ffx_tdl_full, std::ios::out);
 	if (!fin.is_open() || !fout.is_open())
@@ -142,7 +148,7 @@ bool CMathTypeProcessor::CreateMathmlFFxTdl(const std::string& mathml2_ffx_tdl)
 		return bRet;
 	}
 	bool flag = true;
-	const std::string namespace_mathml_tdl_head = "MathType Output Translator 1.0: \"MathML 2.0 (m namespace)\"";
+	const std::string namespace_mathml_tdl_head = "MathType Output Translator 1.0";
 	std::string file_line;
 	while(std::getline(fin, file_line))
 	{
@@ -260,16 +266,90 @@ void CMathTypeProcessor::ConvertToXml(char * fn)
 		map_name_to_style.insert(std::make_pair(CHAR_STYLE_NAME_ARR[i], style));
 	}
 
-	CreateMathmlFFxTdl(MATHML2_FFX_TDL);
+	CreateMathmlFFxTdl(MATHML2_FFX_TDL);//需要添加版本号
 	std::string mathml_mnamespace;
-	KMathTypeReturnValue mtef_to_mathml_mnamespace_ok = ConvertMTEFtoXmlByTdl(mtef_byte_data, MATHML2_MNAMESPACE_TDL, mathml_mnamespace);
+	KMathTypeReturnValue mtef_to_mathml_mnamespace_ok = ConvertMTEFtoXmlByTdl(mtef_byte_data, MATHML2_NAMESPACEATTR_TDL, mathml_mnamespace);
 	std::string mathml_ffx;
 	KMathTypeReturnValue mtef_to_mathml_ffx_ok = ConvertMTEFtoXmlByTdl(mtef_byte_data, MATHML2_FFX_TDL, mathml_ffx);
 	if (mtef_to_mathml_mnamespace_ok != mtOK || mtef_to_mathml_ffx_ok !=mtOK)
 	{
 		return;
 	}
-	CXMLTree xmlTree;
-	xmlTree.LoadXML(mathml_mnamespace);
-	xmlTree.AddXPathNamespace(L"m", L"http://www.w3.org/1998/Math/MathML");
+	CXMLTree xmlDataTree;
+	xmlDataTree.LoadXML(s2ws(mathml_mnamespace).c_str());
+	xmlDataTree.AddXPathNamespace(L"m", L"http://www.w3.org/1998/Math/MathML");
+
+	CXMLTree xmlStyleTree;
+	xmlStyleTree.LoadXML(s2ws(mathml_ffx).c_str());
+	xmlStyleTree.AddXPathNamespace(L"m", L"http://www.w3.org/1998/Math/MathML");
+	for (auto iter=map_name_to_style.begin(); iter!=map_name_to_style.end(); iter++)
+	{
+		std::wstring style_name = s2ws(iter->first);
+		std::wstring style_val = s2ws(iter->second);
+		std::wstring xPath = L"//m:mtext[@mathtypevariant='" + style_name + L"']";
+		CXMLNodeList mtexts = xmlStyleTree.GetNodes(xPath.c_str());
+		CXMLNode mtext = mtexts.NextNode();
+		while (mtext)
+		{
+			static_cast<CXMLElement>(mtext).SetAttributeValueByName(L"mathtypevariant", style_val.c_str());
+			mtext = mtexts.NextNode();
+		}
+	}
+	std::map<std::wstring, std::vector<std::wstring>> text_key_to_style_arr;
+	std::wstring data_xpath = L"//*[name()='mtext' or name()='mn' or name()='mi' or name()='mo' or name()='ms']";
+	CXMLNodeList nodes = xmlDataTree.GetNodes(data_xpath.c_str());
+	CXMLNode node = nodes.NextNode();
+	for (CXMLNode node=nodes.NextNode(); node; node = nodes.NextNode())
+	{
+		std::wstring text_key = node.Getwchar_tText();
+		if (text_key.empty())
+		{
+			continue;
+		}
+		auto iter = text_key_to_style_arr.find(text_key);
+		if (iter == text_key_to_style_arr.end())
+		{
+			std::vector<std::wstring> style_arr;
+			std::wstring style_xpath = L"//*[text()='" + text_key + L"']";
+			CXMLNodeList styles = xmlStyleTree.GetNodes(style_xpath.c_str());
+			CXMLNode style = styles.NextNode();
+			while (style)
+			{
+				std::wstring style_str = static_cast<CXMLElement>(style).GetAttributeValueByName(L"mathtypevariant");
+				style_arr.push_back(style_str);
+				style = styles.NextNode();
+			}
+			text_key_to_style_arr.insert(make_pair(text_key, style_arr));
+		}
+		
+	}
+	nodes.Reset();
+	for (CXMLNode node=nodes.NextNode(); node; node = nodes.NextNode())
+	{
+		std::wstring text_key = node.Getwchar_tText();
+		if (text_key.empty())
+		{
+			continue;
+		}
+		auto iter = text_key_to_style_arr.find(text_key);
+		if (iter != text_key_to_style_arr.end())
+		{
+			std::vector<std::wstring>& style_arr = iter->second;
+			static_cast<CXMLElement>(node).SetAttributeValueByName(L"mathvariant", style_arr[0].c_str());
+			style_arr.pop_back();
+		}
+	}
+	std::wstring ss = xmlDataTree.GetXMLSrc();
+}
+
+std::wstring CMathTypeProcessor::s2ws(const std::string& str)
+{
+	std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> conv;
+	return conv.from_bytes(str);
+}
+
+std::string CMathTypeProcessor::ws2s(const std::wstring& wstr)
+{
+	std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> conv;
+	return conv.to_bytes(wstr);
 }

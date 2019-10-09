@@ -94,6 +94,8 @@ public:
 	virtual ~CMathTypeProcessor(void);
 	void ConvertToXml(char * fn);
 private:
+	std::wstring s2ws(const std::string& str);
+	std::string ws2s(const std::wstring& wstr);
 	std::string GetMathTypePath();
 	MTSDKDN::KMathTypeReturnValue ConvertMTEFtoXmlByTdl(const std::vector<BYTE>& mtef_byte_data, const std::string& tdl_name, std::string& xml_string);
 	bool CreateMathmlFFxTdl(const std::string& mathml2_ffx_tdl);
