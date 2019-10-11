@@ -1,6 +1,9 @@
 #pragma once
+
 #include <string>
 #include <vector>
+#include "XML/XML.H"
+
 namespace MTSDKDN
 {
 	enum KMathTypeReturnValue
@@ -87,21 +90,48 @@ struct MTAPI_DIMS
 	MTAPI_RECT bounds;
 };
 
+//struct MTProcessorParam
+//{
+//	std::string m_;
+//	MTProcessorParam()
+//	{
+//		Clear();
+//	}
+//	void Clear()
+//	{
+//		m_ParseMTFileName.clear();
+//		//m_DesMTFileName.clear();
+//	}
+//};
+class CXMLTree;
+class CMathTypeHelper;
 class CMathTypeProcessor
 {
 public:
 	CMathTypeProcessor(void);
 	virtual ~CMathTypeProcessor(void);
-	void ConvertToXml(char * fn);
+	std::wstring ConvertToXml(const std::wstring& fn);
 private:
+	bool GetMathTypeCharacterStylePrefs(const CMathTypeHelper& mathTypeHelper, std::map<std::string, std::string>& map_name_to_style);
+	std::string GetStrCharacterStyle(BYTE byte_val);
+	bool ProcessStyleXml(const std::map<std::string, std::string>& map_name_to_style, CXMLTree& xmlStyleTree);
+	bool GetMathmlStyleXml(const CMathTypeHelper& mathTypeHelper, CXMLTree& xmlStyleTree);
+	bool BuildDataStyleMap(const CXMLNodeList& dataNodes, const CXMLTree& xmlStyleTree, 
+		std::map<wchar_t, std::vector<std::wstring>>& text_key_to_style_arr);
+	bool ApplyStyleToDataXML(std::map<wchar_t, std::vector<std::wstring>>& text_key_to_style_arr, CXMLNodeList& dataNodes);
+
+	bool Extract(const wchar_t * wcsArchiveFileName, const wchar_t * wcsOutPath);
 	std::wstring s2ws(const std::string& str);
 	std::string ws2s(const std::wstring& wstr);
 	std::string GetMathTypePath();
-	MTSDKDN::KMathTypeReturnValue ConvertMTEFtoXmlByTdl(const std::vector<BYTE>& mtef_byte_data, const std::string& tdl_name, std::string& xml_string);
+	bool ConvertMTEFtoXmlByTdl(const CMathTypeHelper& mathTypeHelper, const std::string& tdl_name, CXMLTree& xmlTree);
+	MTSDKDN::KMathTypeReturnValue ConvertMTEFtoXmlStringByTdl(const std::vector<BYTE>& mtef_byte_data, const std::string& tdl_name, std::string& xml_string);
 	bool CreateMathmlFFxTdl(const std::string& mathml2_ffx_tdl);
 	void WriteMathmlFFxTdlLine(std::ofstream& fout);
 	std::string CreateMathmlFFxTdlLine(const std::string& source, const std::string& base_str);
 	std::string FindReplaceString(const std::string& source, const std::string& findstr, const std::string& replacestr);
+	void BuildStyleArr(wchar_t text_key, const CXMLTree& xmlStyleTree, std::vector<std::wstring>& style_arr);
+private:
 	std::string mathtype_path_;
 	HMODULE m_hMT6Dll;
 };

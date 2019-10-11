@@ -16,8 +16,6 @@
 
 #include "MathTypeHelper.h"
 
-#include "Interface/XML/XML.H"
-
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -29,8 +27,9 @@ static const std::string MATHML2_FFX_TDL = "MathML2 (FFx).tdl";
 static const std::string MATHML2_MNAMESPACE_TDL = "MathML2 (m namespace).tdl";
 static const std::string MATHML2_NAMESPACEATTR_TDL = "MathML2 (namespace attr).tdl";
 static const int CHAR_STYLE_NUM = 12;
-static const std::string CHAR_STYLE_NAMES[] = {"text","function","variable","greek","lc_greek","uc_greek","symbol","vector","number","extra_math","user1style","user2style"};
-static const std::vector<std::string> CHAR_STYLE_NAME_ARR(CHAR_STYLE_NAMES, CHAR_STYLE_NAMES+CHAR_STYLE_NUM);
+static const std::string CHAR_STYLE_NAMES[] = {"text","function","variable","lc_greek","uc_greek","symbol","vector","number","user1style","user2style","extra_math"};
+static const std::vector<std::string> CHAR_STYLE_NAME_ARR(CHAR_STYLE_NAMES, CHAR_STYLE_NAMES+CHAR_STYLE_NUM-1);
+static const std::string TEXT_FE = "text_fe";
 
 typedef KMathTypeReturnValue (WINAPI *MTAPIConnectFunc)(int,int);
 typedef KMathTypeReturnValue (WINAPI *MTAPIDisconnectFunc)();
@@ -58,6 +57,37 @@ std::string CMathTypeProcessor::GetMathTypePath()
 	::RegCloseKey(hKEY); 
 
 	return (char*)(byWordConvPath);
+}
+
+bool CMathTypeProcessor::Extract(const wchar_t * wcsArchiveFileName, const wchar_t * wcsOutPath)
+{
+	if((wcslen(wcsArchiveFileName) > 256) || (wcslen(wcsOutPath) > 256))
+	{
+		return false;
+	}
+
+	STARTUPINFO si;
+	PROCESS_INFORMATION pi;
+
+	ZeroMemory( &si, sizeof(si) );
+	si.cb = sizeof(si);
+	si.dwFlags = STARTF_USESHOWWINDOW|STARTF_FORCEOFFFEEDBACK;
+	si.wShowWindow = SW_HIDE;
+	ZeroMemory( &pi, sizeof(pi) );
+
+	wchar_t pwszCommandLine[1024];
+	wmemset(pwszCommandLine,0,1024);
+	std::wstring str7zaPath = gtl::GetCombinedPathName(gtl::GetModuleDirectoryPath(NULL).c_str(), L"7za.exe");
+	swprintf_s(pwszCommandLine,L"\"%s\" x \"%s\" -o\"%s\" -y",str7zaPath.c_str(),wcsArchiveFileName,wcsOutPath);
+
+	if(!::CreateProcess(NULL,pwszCommandLine,NULL,NULL,FALSE,0,NULL,NULL,&si,&pi))
+	{
+		return false;
+	}
+	WaitForSingleObject( pi.hProcess, INFINITE);
+	CloseHandle( pi.hProcess );
+	CloseHandle( pi.hThread );
+	return gtl::IsFileExist(wcsOutPath);
 }
 
 std::string CMathTypeProcessor::FindReplaceString(const std::string& source, const std::string& findstr, const std::string& replacestr)
@@ -102,30 +132,6 @@ void CMathTypeProcessor::WriteMathmlFFxTdlLine(std::ofstream& fout)
 		fout << CreateMathmlFFxTdlLine(ffx_run_command, CHAR_STYLE_NAME_ARR[i]) << std::endl 
 			<< CreateMathmlFFxTdlLine(ffx_char_command, CHAR_STYLE_NAME_ARR[i]) << std::endl;
 	}
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "text") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "text") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "function") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "function") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "variable") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "variable") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "greek") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "greek") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "lc_greek") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "lc_greek") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "uc_greek") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "uc_greek") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "symbol") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "symbol") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "vector") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "vector") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "number") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "number") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "extra_math") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "extra_math") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "user1style") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "user1style") << std::endl;
-	//fout << CreateMathmlFFxTdlLine(ffx_run_command, "user2style") << std::endl 
-	//	 << CreateMathmlFFxTdlLine(ffx_char_command, "user2style") << std::endl;
 }
 
 bool CMathTypeProcessor::CreateMathmlFFxTdl(const std::string& mathml2_ffx_tdl)
@@ -186,7 +192,28 @@ CMathTypeProcessor::~CMathTypeProcessor(void)
 	}
 }
 
-KMathTypeReturnValue CMathTypeProcessor::ConvertMTEFtoXmlByTdl(const std::vector<BYTE>& mtef_byte_data, const std::string& tdl_name, std::string& xml_string)
+bool CMathTypeProcessor::ConvertMTEFtoXmlByTdl(const CMathTypeHelper& mathTypeHelper, const std::string& tdl_name, CXMLTree& xmlTree)
+{
+	bool bRet = false;
+
+	std::vector<BYTE> file_byte_data = mathTypeHelper.GetByteData();
+	UINT mtef_bdx = mathTypeHelper.GetMtef_bdx();
+	UINT mtef_edx = mathTypeHelper.GetMtef_edx();
+	std::vector<BYTE> mtef_byte_data(file_byte_data.begin()+mtef_bdx, file_byte_data.begin()+mtef_edx);
+
+	std::string xml_str;
+	KMathTypeReturnValue kMathTypeReturnValue = ConvertMTEFtoXmlStringByTdl(mtef_byte_data, tdl_name, xml_str);
+	if (kMathTypeReturnValue != mtOK)
+	{
+		return bRet;
+	}
+	xmlTree.LoadXML(s2ws(xml_str).c_str());
+	xmlTree.AddXPathNamespace(L"m", L"http://www.w3.org/1998/Math/MathML");
+
+	return bRet = true;
+}
+
+KMathTypeReturnValue CMathTypeProcessor::ConvertMTEFtoXmlStringByTdl(const std::vector<BYTE>& mtef_byte_data, const std::string& tdl_name, std::string& xml_string)
 {
 	KMathTypeReturnValue kMathTypeReturnValue = mtERROR;
 
@@ -219,127 +246,264 @@ KMathTypeReturnValue CMathTypeProcessor::ConvertMTEFtoXmlByTdl(const std::vector
 	return kMathTypeReturnValue;
 }
 
-void CMathTypeProcessor::ConvertToXml(char * fn)
+void CMathTypeProcessor::BuildStyleArr(wchar_t text_key, const CXMLTree& xmlStyleTree, std::vector<std::wstring>& style_arr)
 {
-	MTParsParam param;
-	param.m_ParseMTFileName = fn;
-	CMathTypeHelper mathTypeHelper;
-	mathTypeHelper.Init(param);
-	std::vector<BYTE> file_byte_data = mathTypeHelper.GetByteData();
-	UINT mtef_bdx = mathTypeHelper.GetMtef_bdx();
-	UINT mtef_edx = mathTypeHelper.GetMtef_edx();
-	std::vector<BYTE> mtef_byte_data(file_byte_data.begin()+mtef_bdx, file_byte_data.begin()+mtef_edx);
+	std::wstring style_xpath = L"//*[contains(./text(), '";
+	style_xpath += text_key;
+	style_xpath += L"')]";
+	CXMLNodeList styles = xmlStyleTree.GetNodes(style_xpath.c_str());
+	CXMLNode style = styles.NextNode();
+	while (style)
+	{
+		std::wstring style_str = static_cast<CXMLElement>(style).GetAttributeValueByName(L"mathtypevariant");
+		std::wstring style_texts = style.Getwchar_tText();
+		for (int i=0; i<style_texts.size(); i++)
+		{
+			if (style_texts[i] == text_key)
+			{
+				style_arr.push_back(style_str);
+			}	
+		}
+		style = styles.NextNode();
+	}
+}
+
+std::string CMathTypeProcessor::GetStrCharacterStyle(BYTE byte_val)
+{
+	std::string style("");
+
+	switch (byte_val)
+	{
+	case 0x00:
+		{
+			style = "plain";
+		}
+		break;
+	case 0x01:
+		{
+			style = "bold";
+		}
+		break;
+	case 0x02:
+		{
+			style = "italic";
+		}
+		break;
+	case 0x03:
+		{
+			style = "bold_italic";
+		}
+		break;
+	default:
+		break;
+	}
+
+	return style;
+}
+
+bool CMathTypeProcessor::GetMathTypeCharacterStylePrefs(const CMathTypeHelper& mathTypeHelper, std::map<std::string, std::string>& map_name_to_style)
+{
+	bool bRet = false;
+
 	std::vector<BYTE> char_style_arr;
 	mathTypeHelper.GetCharStyleArr(char_style_arr);
 	if (char_style_arr.size() != CHAR_STYLE_NUM)
 	{
-		return;
+		return bRet;
 	}
-	std::map<std::string, std::string> map_name_to_style;
-	for (int i=0; i<CHAR_STYLE_NUM; i++)
+	
+	for (int i=0; i<CHAR_STYLE_NAME_ARR.size(); i++)
 	{
-		std::string style;
-		switch (char_style_arr[i])
-		{
-		case 0x00:
-			{
-				style = "plain";
-			}
-			break;
-		case 0x01:
-			{
-				style = "bold";
-			}
-			break;
-		case 0x02:
-			{
-				style = "italic";
-			}
-			break;
-		case 0x03:
-			{
-				style = "bold_italic";
-			}
-		default:
-			break;
-		}
+		std::string style = GetStrCharacterStyle(char_style_arr[i]);
 		map_name_to_style.insert(std::make_pair(CHAR_STYLE_NAME_ARR[i], style));
 	}
+	map_name_to_style.insert(std::make_pair(TEXT_FE, GetStrCharacterStyle(char_style_arr[char_style_arr.size() - 1])));
+	return bRet = true;
+}
+
+bool CMathTypeProcessor::ProcessStyleXml(const std::map<std::string, std::string>& map_name_to_style, CXMLTree& xmlStyleTree)
+{
+	//number
+	{
+		std::wstring no_mathvariant_mn_xpath = L"//m:mn[not(@mathvariant)]";
+		CXMLNodeList no_mathvariant_mns = xmlStyleTree.GetNodes(no_mathvariant_mn_xpath.c_str());
+		CXMLNode no_mathvariant_mn = no_mathvariant_mns.NextNode();
+		while (no_mathvariant_mn)
+		{
+			static_cast<CXMLElement>(no_mathvariant_mn).SetAttributeValueByName(L"mathtypevariant", L"number");
+			no_mathvariant_mn = no_mathvariant_mns.NextNode();
+		}
+	}
+	//mi 汉字
+	{
+		std::wstring no_mathvariant_mi_xpath = L"//m:mi[not(@mathvariant)]";
+		CXMLNodeList no_mathvariant_mis = xmlStyleTree.GetNodes(no_mathvariant_mi_xpath.c_str());
+		for (CXMLNode no_mathvariant_mi = no_mathvariant_mis.NextNode(); no_mathvariant_mi; no_mathvariant_mi = no_mathvariant_mis.NextNode())
+		{
+			std::wstring mi_text = no_mathvariant_mi.Getwchar_tText();
+			if (mi_text.empty())
+			{
+				continue;
+			}
+			if (mi_text[0]>=0x4E00 && mi_text[0]<=0x9FA5)
+			{
+				static_cast<CXMLElement>(no_mathvariant_mi).SetAttributeValueByName(L"mathtypevariant", s2ws(TEXT_FE).c_str());
+			}
+		}
+	}
+	//other
+	{
+		for (auto iter=map_name_to_style.begin(); iter!=map_name_to_style.end(); iter++)
+		{
+			std::wstring style_name = s2ws(iter->first);
+			std::wstring style_val = s2ws(iter->second);
+			std::wstring xPath = L"//*[@mathtypevariant='" + style_name + L"']";
+			CXMLNodeList mtexts = xmlStyleTree.GetNodes(xPath.c_str());
+			CXMLNode mtext = mtexts.NextNode();
+			while (mtext)
+			{
+				static_cast<CXMLElement>(mtext).SetAttributeValueByName(L"mathtypevariant", style_val.c_str());
+				mtext = mtexts.NextNode();
+			}
+		}
+	}
+
+
+	return true;
+}
+
+bool CMathTypeProcessor::GetMathmlStyleXml(const CMathTypeHelper& mathTypeHelper, CXMLTree& xmlStyleTree)
+{
+	bool bRet = false;
 
 	CreateMathmlFFxTdl(MATHML2_FFX_TDL);//需要添加版本号
-	std::string mathml_mnamespace;
-	KMathTypeReturnValue mtef_to_mathml_mnamespace_ok = ConvertMTEFtoXmlByTdl(mtef_byte_data, MATHML2_NAMESPACEATTR_TDL, mathml_mnamespace);
-	std::string mathml_ffx;
-	KMathTypeReturnValue mtef_to_mathml_ffx_ok = ConvertMTEFtoXmlByTdl(mtef_byte_data, MATHML2_FFX_TDL, mathml_ffx);
-	if (mtef_to_mathml_mnamespace_ok != mtOK || mtef_to_mathml_ffx_ok !=mtOK)
+	if (!ConvertMTEFtoXmlByTdl(mathTypeHelper, MATHML2_FFX_TDL, xmlStyleTree))
 	{
-		return;
+		return bRet;
 	}
-	CXMLTree xmlDataTree;
-	xmlDataTree.LoadXML(s2ws(mathml_mnamespace).c_str());
-	xmlDataTree.AddXPathNamespace(L"m", L"http://www.w3.org/1998/Math/MathML");
+	std::map<std::string, std::string> map_name_to_style;
+	GetMathTypeCharacterStylePrefs(mathTypeHelper, map_name_to_style);
+	ProcessStyleXml(map_name_to_style, xmlStyleTree);
 
-	CXMLTree xmlStyleTree;
-	xmlStyleTree.LoadXML(s2ws(mathml_ffx).c_str());
-	xmlStyleTree.AddXPathNamespace(L"m", L"http://www.w3.org/1998/Math/MathML");
-	for (auto iter=map_name_to_style.begin(); iter!=map_name_to_style.end(); iter++)
+	return bRet=true; 
+}
+
+bool CMathTypeProcessor::BuildDataStyleMap(const CXMLNodeList& dataNodes, const CXMLTree& xmlStyleTree, 
+							std::map<wchar_t, std::vector<std::wstring>>& text_key_to_style_arr)
+{
+	dataNodes.Reset();
+	for (CXMLNode dataNode=dataNodes.NextNode(); dataNode; dataNode = dataNodes.NextNode())
 	{
-		std::wstring style_name = s2ws(iter->first);
-		std::wstring style_val = s2ws(iter->second);
-		std::wstring xPath = L"//m:mtext[@mathtypevariant='" + style_name + L"']";
-		CXMLNodeList mtexts = xmlStyleTree.GetNodes(xPath.c_str());
-		CXMLNode mtext = mtexts.NextNode();
-		while (mtext)
+		std::wstring texts = dataNode.Getwchar_tText();
+		for (int i=0; i<texts.size(); i++)
 		{
-			static_cast<CXMLElement>(mtext).SetAttributeValueByName(L"mathtypevariant", style_val.c_str());
-			mtext = mtexts.NextNode();
-		}
-	}
-	std::map<std::wstring, std::vector<std::wstring>> text_key_to_style_arr;
-	std::wstring data_xpath = L"//*[name()='mtext' or name()='mn' or name()='mi' or name()='mo' or name()='ms']";
-	CXMLNodeList nodes = xmlDataTree.GetNodes(data_xpath.c_str());
-	CXMLNode node = nodes.NextNode();
-	for (CXMLNode node=nodes.NextNode(); node; node = nodes.NextNode())
-	{
-		std::wstring text_key = node.Getwchar_tText();
-		if (text_key.empty())
-		{
-			continue;
-		}
-		auto iter = text_key_to_style_arr.find(text_key);
-		if (iter == text_key_to_style_arr.end())
-		{
-			std::vector<std::wstring> style_arr;
-			std::wstring style_xpath = L"//*[text()='" + text_key + L"']";
-			CXMLNodeList styles = xmlStyleTree.GetNodes(style_xpath.c_str());
-			CXMLNode style = styles.NextNode();
-			while (style)
+			wchar_t text_key = texts[i];
+			auto iter = text_key_to_style_arr.find(text_key);
+			if (iter == text_key_to_style_arr.end())
 			{
-				std::wstring style_str = static_cast<CXMLElement>(style).GetAttributeValueByName(L"mathtypevariant");
-				style_arr.push_back(style_str);
-				style = styles.NextNode();
+				std::vector<std::wstring> style_arr;
+				BuildStyleArr(text_key, xmlStyleTree, style_arr);
+				text_key_to_style_arr.insert(make_pair(text_key, style_arr));
 			}
-			text_key_to_style_arr.insert(make_pair(text_key, style_arr));
 		}
-		
 	}
-	nodes.Reset();
-	for (CXMLNode node=nodes.NextNode(); node; node = nodes.NextNode())
+	return true;
+}
+
+bool CMathTypeProcessor::ApplyStyleToDataXML(std::map<wchar_t, std::vector<std::wstring>>& text_key_to_style_arr, CXMLNodeList& dataNodes)
+{
+	dataNodes.Reset();
+	for (CXMLNode dataNode=dataNodes.NextNode(); dataNode; dataNode = dataNodes.NextNode())
 	{
-		std::wstring text_key = node.Getwchar_tText();
-		if (text_key.empty())
+		std::wstring texts = dataNode.Getwchar_tText();
+		if (texts.empty())
 		{
 			continue;
 		}
+		wchar_t text_key = texts[0];
 		auto iter = text_key_to_style_arr.find(text_key);
 		if (iter != text_key_to_style_arr.end())
 		{
 			std::vector<std::wstring>& style_arr = iter->second;
-			static_cast<CXMLElement>(node).SetAttributeValueByName(L"mathvariant", style_arr[0].c_str());
-			style_arr.pop_back();
+			if (!style_arr.empty() && !style_arr[0].empty())
+			{
+				CXMLElement elment = static_cast<CXMLElement>(dataNode);
+				if (elment.GetAttributeValueByName(L"mathvariant").empty())
+				{
+					std::wstring mathvariant_val = style_arr[0].compare(L"bold_italic") == 0 ? L"bold-italic" : style_arr[0];
+					elment.SetAttributeValueByName(L"mathvariant", mathvariant_val.c_str());
+				}		
+			}
+		}
+		for (int i=0; i<texts.size(); i++)
+		{
+			wchar_t text_key = texts[i];
+			auto iter = text_key_to_style_arr.find(text_key);
+			if (iter != text_key_to_style_arr.end())
+			{
+				std::vector<std::wstring>& style_arr = iter->second;
+				style_arr.erase(style_arr.begin());
+				if (style_arr.empty())
+				{
+					text_key_to_style_arr.erase(iter);
+				}
+			}
 		}
 	}
-	std::wstring ss = xmlDataTree.GetXMLSrc();
+	return true;
+}
+
+std::wstring CMathTypeProcessor::ConvertToXml(const std::wstring& fn)
+{
+	std::wstring mathml_xml(L"");
+
+	std::wstring parse_mt_file_name = fn;
+	std::wstring wsExt = gtl::GetFileExt(fn.c_str());
+	if(wsExt == L"bin")
+	{
+		std::wstring extract_file_path = fn + L"_extract";
+		bool bRet = Extract(fn.c_str(), extract_file_path.c_str());
+		if (!bRet)
+		{
+			return mathml_xml;
+		}
+		parse_mt_file_name = extract_file_path + L"\\Equation Native";
+	}
+
+	MTParsParam param;
+	param.m_ParseMTFileName = ws2s(parse_mt_file_name);
+	CMathTypeHelper mathTypeHelper;
+	if (!mathTypeHelper.Init(param))
+	{
+		return mathml_xml;
+	}
+
+	CXMLTree xmlDataTree;
+	if (!ConvertMTEFtoXmlByTdl(mathTypeHelper, MATHML2_NAMESPACEATTR_TDL, xmlDataTree))
+	{
+		return mathml_xml;
+	}
+
+	CXMLTree xmlStyleTree;
+	if (!GetMathmlStyleXml(mathTypeHelper, xmlStyleTree))
+	{
+		return mathml_xml;
+	}
+
+	std::wstring data_xpath = L"//*[name()='mtext' or name()='mn' or name()='mi' or name()='mo' or name()='ms']";
+	CXMLNodeList dataNodes = xmlDataTree.GetNodes(data_xpath.c_str());
+	std::map<wchar_t, std::vector<std::wstring>> text_key_to_style_arr;
+	BuildDataStyleMap(dataNodes, xmlStyleTree, text_key_to_style_arr);
+	ApplyStyleToDataXML(text_key_to_style_arr, dataNodes);
+
+	mathml_xml = xmlDataTree.GetXMLSrc();
+	std::wstring findstr = L"xmlns=";
+	int pos = mathml_xml.find(findstr);////查找指定的串
+	if (pos != -1)
+	{
+		mathml_xml.replace(pos, findstr.length(), L"xmlns:mml=");////用新的串替换掉指定的串
+	}
+	return mathml_xml;
 }
 
 std::wstring CMathTypeProcessor::s2ws(const std::string& str)

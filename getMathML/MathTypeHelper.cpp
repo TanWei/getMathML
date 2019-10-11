@@ -96,8 +96,7 @@ bool CMathTypeHelper::Init(const MTParsParam& param)
 	bool bRet = false;
 
 	m_MTParsParam = param;
-	bRet = ReadFileIntoBinary(param.m_ParseMTFileName.c_str(), m_ByteData);
-	if (!bRet)
+	if (!ReadFileIntoBinary(param.m_ParseMTFileName.c_str(), m_ByteData))
 	{
 		return bRet;
 	}
@@ -216,6 +215,10 @@ std::vector<MTRecordPtr> CMathTypeHelper::DoParseMTRecord()
 	while (m_idx < m_ByteData.size())
 	{
 		MTRecordPtr mt_record_ptr = ParseMTRecord();
+		if (mt_record_ptr == nullptr)
+		{
+			break;
+		}
 		record_base_ptr_arr.push_back(mt_record_ptr);
 		if (mt_record_ptr->record_type == END_RECORD)
 		{
@@ -237,7 +240,10 @@ MTRecordPtr CMathTypeHelper::ParseMTRecord()
 {
 	KRecordType record_type = ParseRecordType();
 	std::map<KRecordType, ParseRecordFunc>::iterator iter = m_RecordParseFuncMap.find(record_type);
-	ASSERT(iter != m_RecordParseFuncMap.end());
+	if (iter == m_RecordParseFuncMap.end())
+	{
+		return nullptr;
+	}
 
 	ParseRecordFunc parseRecordFunc = iter->second;
 	MTRecordPtr record = parseRecordFunc();
@@ -621,7 +627,7 @@ MTRecordPtr CMathTypeHelper::ParseENCODING_DEF()
 	return encoding_def;
 }
 
-void CMathTypeHelper::GetCharStyleArr(std::vector<BYTE>& char_style_arr)
+void CMathTypeHelper::GetCharStyleArr(std::vector<BYTE>& char_style_arr) const
 {
 	std::vector<std::pair<BYTE, BYTE>> style_arr;
 	std::shared_ptr<MTEqn_Prefs> eqn_prefs;

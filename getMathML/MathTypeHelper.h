@@ -41,7 +41,7 @@ public:
 	std::vector<BYTE> GetByteData() const {return m_ByteData;}
 	UINT GetMtef_bdx() const { return m_mtef_bdx; }
 	UINT GetMtef_edx() const { return m_mtef_edx; }
-	void GetCharStyleArr(std::vector<BYTE>& char_style_arr);
+	void GetCharStyleArr(std::vector<BYTE>& char_style_arr) const;
 private:
 	EQNOLEFILEHDRPtr ParseEQN_OLE_Header();
 	AppsMFCCHeaderPtr ParseAppsMFCCHeader();
